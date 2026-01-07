@@ -37,15 +37,15 @@ const PrizeFormModal: React.FC<PrizeFormModalProps> = ({ isOpen, onClose, onSave
     }
   }, [isOpen, prizeToEdit]);
 
-  // Image compression logic
   const resizeImage = (base64Str: string): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.src = base64Str;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 600;
-        const MAX_HEIGHT = 600;
+        // Optimized: reduced size to 500px for better density
+        const MAX_WIDTH = 500;
+        const MAX_HEIGHT = 500;
         let width = img.width;
         let height = img.height;
 
@@ -66,8 +66,8 @@ const PrizeFormModal: React.FC<PrizeFormModalProps> = ({ isOpen, onClose, onSave
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
         
-        // Compress to JPEG with 0.7 quality
-        const resizedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        // Optimized: 0.6 quality is usually visually fine for inventory but halves file size
+        const resizedBase64 = canvas.toDataURL('image/jpeg', 0.6);
         resolve(resizedBase64);
       };
     });
@@ -104,7 +104,7 @@ const PrizeFormModal: React.FC<PrizeFormModalProps> = ({ isOpen, onClose, onSave
           setPhoto(compressed);
         } catch (err) {
           console.error("Image processing failed", err);
-          setPhoto(base64); // Fallback to original if compression fails
+          setPhoto(base64); 
         } finally {
           setIsProcessingImage(false);
         }

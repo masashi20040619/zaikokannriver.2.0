@@ -15,6 +15,7 @@ import CogIcon from './components/icons/CogIcon';
 import ArrowDownTrayIcon from './components/icons/ArrowDownTrayIcon';
 import ArrowUpTrayIcon from './components/icons/ArrowUpTrayIcon';
 import TrashIcon from './components/icons/TrashIcon';
+import { StorageService } from './services/storage';
 
 const prizeCategories: PrizeCategory[] = ['マスコット', 'ぬいぐるみ', 'フィギュア', 'その他'];
 
@@ -35,36 +36,52 @@ const App: React.FC = () => {
   const [showTools, setShowTools] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load data on mount
+  // Load data from IndexedDB (with migration from localStorage)
   useEffect(() => {
-    try {
-      const storedPrizes = localStorage.getItem('crane-game-prizes');
-      if (storedPrizes) {
-        setPrizes(JSON.parse(storedPrizes));
+    const initData = async () => {
+      try {
+        // First try to load from IndexedDB
+        let data = await StorageService.loadPrizes();
+        
+        // If DB is empty, check if we have old data in localStorage to migrate
+        if (data.length === 0) {
+          const oldData = StorageService.getLocalStorageData();
+          if (oldData && oldData.length > 0) {
+            console.log("Migrating data from localStorage to IndexedDB...");
+            await StorageService.savePrizes(oldData);
+            data = oldData;
+            // Optionally clear old data after successful migration
+            // StorageService.clearLocalStorage(); 
+          }
+        }
+        
+        setPrizes(data);
+      } catch (error) {
+        console.error("Failed to load prizes from IndexedDB", error);
+        // Fallback to localStorage if IndexedDB fails for some reason
+        const fallbackData = StorageService.getLocalStorageData();
+        if (fallbackData) setPrizes(fallbackData);
       }
-    } catch (error) {
-      console.error("Failed to load prizes", error);
-    }
+    };
+    
+    initData();
   }, []);
 
-  // Manual save to localStorage
-  const handleSaveToStorage = useCallback(() => {
+  // Async save to IndexedDB
+  const handleSaveToStorage = useCallback(async () => {
     setSaveStatus('saving');
-    setTimeout(() => {
-      try {
-        localStorage.setItem('crane-game-prizes', JSON.stringify(prizes));
-        setIsDirty(false);
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch (error) {
-        console.error("Storage error:", error);
-        alert("【エラー】保存容量がいっぱいです！\n\nブラウザの制限によりこれ以上保存できません。右上のツールメニューから「バックアップを保存」してPC等に退避させるか、不要な画像を削除してください。");
-        setSaveStatus('idle');
-      }
-    }, 400);
+    try {
+      await StorageService.savePrizes(prizes);
+      setIsDirty(false);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error("Storage error:", error);
+      alert("【エラー】データの保存に失敗しました。ブラウザの設定でデータベースの使用が許可されているか確認してください。");
+      setSaveStatus('idle');
+    }
   }, [prizes]);
 
-  // Export data as JSON file
   const handleExport = useCallback(() => {
     const dataStr = JSON.stringify(prizes, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -77,7 +94,6 @@ const App: React.FC = () => {
     setShowTools(false);
   }, [prizes]);
 
-  // Import data from JSON file
   const handleImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -180,7 +196,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans pb-24">
-      {/* Hidden file input for import */}
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -221,7 +236,6 @@ const App: React.FC = () => {
                   <button 
                     onClick={() => setShowTools(!showTools)}
                     className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                    aria-label="ツールメニュー"
                   >
                     <CogIcon className="w-5 h-5" />
                   </button>
@@ -290,7 +304,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        {/* Statistics Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">総アイテム数</p>
@@ -351,16 +364,13 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Action Button */}
       <button
         onClick={() => { setPrizeToEdit(null); setIsModalOpen(true); }}
         className="fixed bottom-8 right-8 bg-indigo-600 text-white p-5 rounded-2xl shadow-2xl hover:bg-indigo-700 transition-all transform hover:scale-110 active:scale-95 z-30 ring-4 ring-white dark:ring-slate-900"
-        aria-label="景品を追加"
       >
         <PlusIcon className="h-6 w-6 stroke-[3]" />
       </button>
 
-      {/* Persistence Reminder */}
       {isDirty && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-orange-500 text-white px-6 py-3 rounded-full shadow-2xl z-40 flex items-center gap-3 animate-in fade-in slide-in-from-bottom duration-300">
           <span className="text-xs font-black uppercase tracking-widest">未保存のデータがあります</span>
